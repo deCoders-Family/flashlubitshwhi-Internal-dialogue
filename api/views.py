@@ -1,9 +1,16 @@
 import uuid
 # from django.shortcuts import render
 
+from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView
+
+
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from .choices import SenderTypeChoices, StatusChoices
 from .models import Avatar, ChatHistory, GeneratedAudio
@@ -11,6 +18,7 @@ from .serializers import (
     AvatarSerializer,
     ChatHistorySerializer,
     GeneratedAudioSerializer,
+    LoginUserSerializer,
 )
 from .utils import clean_text, generate_elevenlabs_audio
 
@@ -19,9 +27,38 @@ import google.generativeai as genai
 # Create your views here.
 
 
+class LoginUserView(generics.GenericAPIView):
+    serializer_class = LoginUserSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        username = serializer.validated_data["username"]
+        password = serializer.validated_data["password"]
+        user = authenticate(username=username, password=password)
+
+        if not user:
+            return Response(
+                {"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        refresh = RefreshToken.for_user(user)
+
+        return Response(
+            {
+                "refresh": str(refresh),
+                "access": str(refresh.access_token),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
 # class GenerateAudioView(APIView):
 class GenerateAudioView(generics.GenericAPIView):
     serializer_class = GeneratedAudioSerializer
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
         serializer = GeneratedAudioSerializer(data=request.data)
         if serializer.is_valid():
@@ -130,11 +167,13 @@ class GenerateAudioView(generics.GenericAPIView):
 class ListCreateAvatarAPIView(generics.ListCreateAPIView):
     queryset = Avatar.objects.IS_ACTIVE()
     serializer_class = AvatarSerializer
+    permission_classes = [IsAuthenticated]
 
 
 class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = AvatarSerializer
     lookup_field = "uid"
+    permission_classes = [IsAuthenticated]
 
     def get_object(self):
         avatar = Avatar.objects.get(
@@ -151,6 +190,7 @@ class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView)
 class ListCreateChatHistorySerializer(generics.ListCreateAPIView):
     queryset = ChatHistory.objects.IS_ACTIVE()
     serializer_class = ChatHistorySerializer
+    permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
         serializer.save()
@@ -159,6 +199,7 @@ class ListCreateChatHistorySerializer(generics.ListCreateAPIView):
 class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ChatHistorySerializer
     lookup_field = "uid"
+    permission_classes = [IsAuthenticated]
     # queryset = ChatHistory.objects.filter(status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE])
 
     def retrieve(self, request, *args, **kwargs):
@@ -186,13 +227,14 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
             },
             status=status.HTTP_200_OK,
         )
-        
+
     def perform_destroy(self, instance):
         instance.status = StatusChoices.REMOVED
         instance.save()
 
 
 class ReplayDialogeAPIView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         conversation_id = request.data.get("conversation_id")
         if not conversation_id:
@@ -230,6 +272,7 @@ class ReplayDialogeAPIView(APIView):
 
 
 class AnalyzeTextView(APIView):
+    permission_classes = [IsAuthenticated]
     def post(self, request):
         text = request.data.get("text")
         if not text:
