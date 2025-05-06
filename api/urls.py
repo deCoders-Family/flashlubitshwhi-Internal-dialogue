@@ -1,10 +1,16 @@
 from django.urls import path
 
+from rest_framework_simplejwt.views import (
+    TokenObtainPairView,
+    TokenRefreshView,
+)
+
 from .views import (
     AnalyzeTextView,
     GenerateAudioView,
     ListCreateAvatarAPIView,
     ListCreateChatHistorySerializer,
+    LoginUserView,
     RetrieveUpdatedDestroyAvatarAPIView,
     RetrieveUpdatedDestroyChatHistoryAPIView,
     ReplayDialogeAPIView,
@@ -12,6 +18,7 @@ from .views import (
 
 
 urlpatterns = [
+    path("login", LoginUserView.as_view()),
     path("speak", GenerateAudioView.as_view()),
     path("avatar", ListCreateAvatarAPIView.as_view()),
     path("avatar/<uuid:uid>", RetrieveUpdatedDestroyAvatarAPIView.as_view()),
@@ -19,4 +26,6 @@ urlpatterns = [
     path("chat-history/<uuid:uid>", RetrieveUpdatedDestroyChatHistoryAPIView.as_view()),
     path("replay-dialogue", ReplayDialogeAPIView.as_view()),
     path("analyze", AnalyzeTextView.as_view()),
+    path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+    path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 ]

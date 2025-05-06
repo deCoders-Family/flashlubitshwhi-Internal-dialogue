@@ -1,6 +1,21 @@
+from django.contrib.auth.models import User
+
 import json
 from rest_framework import serializers
 from .models import GeneratedAudio, ChatHistory, Avatar
+
+
+
+# class UserSerializer(serializers.ModelSerializer):
+#     password = serializers.CharField(write_only=True)
+#     class Meta:
+#         model = User
+#         fields = ('id', 'username', 'email')
+
+
+class LoginUserSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(style={"input_type": "password"}, write_only=True)
 
 
 class GeneratedAudioSerializer(serializers.ModelSerializer):
@@ -89,7 +104,7 @@ class ChatHistorySerializer(serializers.ModelSerializer):
     #             )
 
     #     return value
-    
+
     def create(self, validated_data):
         convo_id = validated_data.get("conversation_id")
         gen_audios = GeneratedAudio.objects.IS_ACTIVE().filter(conversation_id=convo_id)
@@ -102,9 +117,9 @@ class ChatHistorySerializer(serializers.ModelSerializer):
         #     else:
         #         chat_prefix = "ai:"
         #     chat = chat + (f"{chat_prefix}"+f"{gen_audio.text}"+", ")
-        
+
         # return ChatHistory.objects.create(chat=chat, **validated_data)
-        
+
         chat_data = []
         for gen_audio in gen_audios:
             sender_type = gen_audio.sender_type
@@ -112,11 +127,10 @@ class ChatHistorySerializer(serializers.ModelSerializer):
                 chat_data.append({"user": gen_audio.text})
             else:
                 chat_data.append({"ai": gen_audio.text})
-                
+
         chat_str = json.dumps(chat_data, ensure_ascii=False)
         return ChatHistory.objects.create(chat=chat_str, **validated_data)
-        
-    
+
 
 class AvatarSerializer(serializers.ModelSerializer):
     class Meta:
