@@ -19,6 +19,7 @@ from .serializers import (
     ChatHistorySerializer,
     GeneratedAudioSerializer,
     LoginUserSerializer,
+    UserSerializer,
 )
 from .utils import clean_text, generate_elevenlabs_audio
 
@@ -47,17 +48,25 @@ class LoginUserView(generics.GenericAPIView):
 
         return Response(
             {
-                "refresh": str(refresh),
-                "access": str(refresh.access_token),
+                "refreshToken": str(refresh),
+                "accessToken": str(refresh.access_token),
             },
             status=status.HTTP_200_OK,
         )
 
 
+class RetrieveUpdateMeUserView(generics.RetrieveUpdateAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+
 # class GenerateAudioView(APIView):
 class GenerateAudioView(generics.GenericAPIView):
     serializer_class = GeneratedAudioSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = GeneratedAudioSerializer(data=request.data)
@@ -167,7 +176,7 @@ class GenerateAudioView(generics.GenericAPIView):
 class ListCreateAvatarAPIView(generics.ListCreateAPIView):
     queryset = Avatar.objects.IS_ACTIVE()
     serializer_class = AvatarSerializer
-    permission_classes = [IsAuthenticated]
+    # permission_classes = [IsAuthenticated]
 
 
 class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView):
@@ -210,12 +219,14 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
         audio_dict = []
 
         chats = GeneratedAudio.objects.filter(
-            conversation_id=chat_history.conversation_id
+            conversation_id=chat_history.conversation_id, status=StatusChoices.ACTIVE
         )
 
         for chat in chats:
             chat_dict.append({chat.sender_type.lower(): chat.text})
-            audio_dict.append({chat.sender_type.lower(): chat.audio.url})
+            audio_dict.append(
+                {chat.sender_type.lower(): chat.audio.url.split("/media/")[1]}
+            )
 
         return Response(
             {
@@ -231,10 +242,13 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
     def perform_destroy(self, instance):
         instance.status = StatusChoices.REMOVED
         instance.save()
+        
+        GeneratedAudio.objects.filter(conversation_id=instance.conversation_id).update(status=StatusChoices.REMOVED)
 
 
 class ReplayDialogeAPIView(APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         conversation_id = request.data.get("conversation_id")
         if not conversation_id:
@@ -245,7 +259,8 @@ class ReplayDialogeAPIView(APIView):
 
         # Fetch all chats and audios for this conversation
         generated_audios = GeneratedAudio.objects.filter(
-            conversation_id=conversation_id
+            conversation_id=conversation_id,
+            status=StatusChoices.ACTIVE
         )
 
         if not generated_audios.exists():
@@ -259,7 +274,9 @@ class ReplayDialogeAPIView(APIView):
 
         for item in generated_audios:
             chat_list.append({item.sender_type.lower(): item.text})
-            audio_list.append({item.sender_type.lower(): item.audio.url})
+            audio_list.append(
+                {item.sender_type.lower(): item.audio.url.split("/media/")[1]}
+            )
 
         return Response(
             {
@@ -273,6 +290,7 @@ class ReplayDialogeAPIView(APIView):
 
 class AnalyzeTextView(APIView):
     permission_classes = [IsAuthenticated]
+
     def post(self, request):
         text = request.data.get("text")
         if not text:
