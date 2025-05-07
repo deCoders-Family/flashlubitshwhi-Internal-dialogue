@@ -13,12 +13,14 @@ from .views import (
     LoginUserView,
     RetrieveUpdatedDestroyAvatarAPIView,
     RetrieveUpdatedDestroyChatHistoryAPIView,
+    RetrieveUpdateMeUserView,
     ReplayDialogeAPIView,
 )
 
 
 urlpatterns = [
     path("login", LoginUserView.as_view()),
+    path("me", RetrieveUpdateMeUserView.as_view()),
     path("speak", GenerateAudioView.as_view()),
     path("avatar", ListCreateAvatarAPIView.as_view()),
     path("avatar/<uuid:uid>", RetrieveUpdatedDestroyAvatarAPIView.as_view()),

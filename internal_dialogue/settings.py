@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 
 import os
 
+load_dotenv()
+
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -163,6 +165,8 @@ CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://192.168.10.12:3000",
+    "http://192.168.10.38:3000",
+    "https://flash-lubit-frontend.vercel.app",
 ]
 
 # SPECTACULAR_SETTINGS = {

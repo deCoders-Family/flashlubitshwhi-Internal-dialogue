@@ -5,12 +5,21 @@ from rest_framework import serializers
 from .models import GeneratedAudio, ChatHistory, Avatar
 
 
+class UserSerializer(serializers.ModelSerializer):
+    # password = serializers.CharField(write_only=True)
 
-# class UserSerializer(serializers.ModelSerializer):
-#     password = serializers.CharField(write_only=True)
-#     class Meta:
-#         model = User
-#         fields = ('id', 'username', 'email')
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "first_name",
+            "last_name",
+            "email",
+            "is_active",
+            "is_staff",
+            "date_joined",
+        ]
 
 
 class LoginUserSerializer(serializers.Serializer):
