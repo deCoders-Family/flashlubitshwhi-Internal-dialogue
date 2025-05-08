@@ -66,7 +66,7 @@ class RetrieveUpdateMeUserView(generics.RetrieveUpdateAPIView):
 # class GenerateAudioView(APIView):
 class GenerateAudioView(generics.GenericAPIView):
     serializer_class = GeneratedAudioSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
         serializer = GeneratedAudioSerializer(data=request.data)
@@ -176,7 +176,7 @@ class GenerateAudioView(generics.GenericAPIView):
 class ListCreateAvatarAPIView(generics.ListCreateAPIView):
     queryset = Avatar.objects.IS_ACTIVE()
     serializer_class = AvatarSerializer
-    # permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
 
 class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView):
