@@ -13,12 +13,13 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .choices import SenderTypeChoices, StatusChoices
-from .models import Avatar, ChatHistory, GeneratedAudio
+from .models import Avatar, ChatHistory, GeneratedAudio, Mood
 from .serializers import (
     AvatarSerializer,
     ChatHistorySerializer,
     GeneratedAudioSerializer,
     LoginUserSerializer,
+    MoodSerializer,
     UserSerializer,
 )
 from .utils import clean_text, generate_elevenlabs_audio
@@ -84,30 +85,35 @@ class GenerateAudioView(generics.GenericAPIView):
             user_voice_name = validated_data.get("user_voice_name")
             ai_voice_name = validated_data.get("ai_voice_name")
             reply_as = validated_data.get("reply_as", "AI")
-            user_voice = Avatar.objects.get(
+            user_voice = Avatar.objects.filter(
                 voice_name=user_voice_name, side=SenderTypeChoices.USER
-            )
-            ai_voice = Avatar.objects.get(
+            ).first()
+            ai_voice = Avatar.objects.filter(
                 voice_name=ai_voice_name, side=SenderTypeChoices.AI
-            )
+            ).first()
 
             user_voice_id = user_voice.elevenlabs_voice_id
             ai_voice_id = ai_voice.elevenlabs_voice_id
             prompt = ""
-            if mode == "friendly":
-                prompt = f"Respond like a friendly person would in a casual conversation. Keep it short and to the point.\nUser: {user_text}\nAI:"
-            elif mode == "funny":
-                prompt = f"Respond in a funny and lighthearted way. Keep it short and humorous.\nUser: {user_text}\nAI:"
-            elif mode == "flirty":
-                prompt = f"Respond in a playful, flirty way but keep it respectful. Keep it short and sweet.\nUser: {user_text}\nAI:"
-            elif mode == "wise":
-                prompt = f"Respond like a wise person with a calm and thoughtful tone. Keep it brief but insightful.\nUser: {user_text}\nAI:"
-            elif mode == "formal":
-                prompt = f"Respond in a professional and respectful manner. Keep it concise and clear.\nUser: {user_text}\nAI:"
-            elif mode == "angry":
-                prompt = f"Respond with frustration but be short and direct.\nUser: {user_text}\nAI:"
-            elif mode == "sad":
-                prompt = f"Respond with a sad or somber tone, but keep it brief and respectful.\nUser: {user_text}\nAI:"
+            # if mode == "friendly":
+            #     prompt = f"Respond like a friendly person would in a casual conversation. Keep it short and to the point.\nUser: {user_text}\nAI:"
+            # elif mode == "funny":
+            #     prompt = f"Respond in a funny and lighthearted way. Keep it short and humorous.\nUser: {user_text}\nAI:"
+            # elif mode == "flirty":
+            #     prompt = f"Respond in a playful, flirty way but keep it respectful. Keep it short and sweet.\nUser: {user_text}\nAI:"
+            # elif mode == "wise":
+            #     prompt = f"Respond like a wise person with a calm and thoughtful tone. Keep it brief but insightful.\nUser: {user_text}\nAI:"
+            # elif mode == "formal":
+            #     prompt = f"Respond in a professional and respectful manner. Keep it concise and clear.\nUser: {user_text}\nAI:"
+            # elif mode == "angry":
+            #     prompt = f"Respond with frustration but be short and direct.\nUser: {user_text}\nAI:"
+            # elif mode == "sad":
+            #     prompt = f"Respond with a sad or somber tone, but keep it brief and respectful.\nUser: {user_text}\nAI:"
+
+            mood_obj = Mood.objects.filter(
+                mood_name=mode.lower(), status=StatusChoices.ACTIVE
+            ).first()
+            prompt = f"{mood_obj.mood_prompt}\nUser:{user_text}\nAI:"
 
             if reply_as == "AI":
                 model = genai.GenerativeModel("gemini-2.0-flash")
@@ -242,8 +248,10 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
     def perform_destroy(self, instance):
         instance.status = StatusChoices.REMOVED
         instance.save()
-        
-        GeneratedAudio.objects.filter(conversation_id=instance.conversation_id).update(status=StatusChoices.REMOVED)
+
+        GeneratedAudio.objects.filter(conversation_id=instance.conversation_id).update(
+            status=StatusChoices.REMOVED
+        )
 
 
 class ReplayDialogeAPIView(APIView):
@@ -259,8 +267,7 @@ class ReplayDialogeAPIView(APIView):
 
         # Fetch all chats and audios for this conversation
         generated_audios = GeneratedAudio.objects.filter(
-            conversation_id=conversation_id,
-            status=StatusChoices.ACTIVE
+            conversation_id=conversation_id, status=StatusChoices.ACTIVE
         )
 
         if not generated_audios.exists():
@@ -331,3 +338,21 @@ class AnalyzeTextView(APIView):
                 {"error": "Failed to analyze the text."},
                 status=status.HTTP_500_INTERNAL,
             )
+
+
+class ListCreateMoodAPIView(generics.ListCreateAPIView):
+    queryset = Mood.objects.IS_ACTIVE()
+    serializer_class = MoodSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class RetrieveUpdateDestroyMoodAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = MoodSerializer
+    lookup_field = "uid"
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return Mood.objects.get(
+            uid=self.kwargs["uid"],
+            status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE],
+        )

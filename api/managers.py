@@ -21,36 +21,47 @@ class SenderTypeManager(Manager):
 
     def IS_AI(self):
         return self.filter(sender_type=SenderTypeChoices.AI)
-    
-    
+
+
 class GeneratedAudioManager(StatusManager):
     def IS_ACTIVE(self):
         return super().IS_ACTIVE()
-    
+
     def IS_INACTIVE(self):
         return super().IS_INACTIVE()
-    
+
     def IS_REMOVED(self):
         return super().IS_REMOVED()
-    
+
 
 class ChatHistoryManager(StatusManager):
     def IS_ACTIVE(self):
         return super().IS_ACTIVE()
-    
+
     def IS_INACTIVE(self):
         return super().IS_INACTIVE()
-    
-    def IS_REMOVED(self):
-        return super().IS_REMOVED()
-    
-class AvatarManager(StatusManager):
-    def IS_ACTIVE(self):
-        return super().IS_ACTIVE()
-    
-    def IS_INACTIVE(self):
-        return super().IS_INACTIVE()
-    
+
     def IS_REMOVED(self):
         return super().IS_REMOVED()
 
+
+class AvatarManager(StatusManager):
+    def IS_ACTIVE(self):
+        return super().IS_ACTIVE()
+
+    def IS_INACTIVE(self):
+        return super().IS_INACTIVE()
+
+    def IS_REMOVED(self):
+        return super().IS_REMOVED()
+
+
+class MoodManager(StatusManager):
+    def IS_ACTIVE(self):
+        return super().IS_ACTIVE()
+
+    def IS_INACTIVE(self):
+        return super().IS_INACTIVE()
+
+    def IS_REMOVED(self):
+        return super().IS_REMOVED()

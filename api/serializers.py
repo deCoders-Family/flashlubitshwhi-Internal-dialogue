@@ -2,7 +2,7 @@ from django.contrib.auth.models import User
 
 import json
 from rest_framework import serializers
-from .models import GeneratedAudio, ChatHistory, Avatar
+from .models import GeneratedAudio, ChatHistory, Avatar, Mood
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -161,4 +161,26 @@ class AvatarSerializer(serializers.ModelSerializer):
             "uid",
             "created_at",
             "updated_at",
+        ]
+
+
+class MoodSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Mood
+        fields = [
+            "id",
+            "uid",
+            "mood_name",
+            "mood_prompt",
+            "created_at",
+            "updated_at",
+            "status",
+        ]
+        
+        read_only_fields = [
+            "id",
+            "uid",
+            "created_at",
+            "updated_at",
+            "status",
         ]
