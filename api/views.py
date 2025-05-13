@@ -1,8 +1,9 @@
+import os
 import uuid
-# from django.shortcuts import render
 
 from django.contrib.auth import authenticate
-from django.contrib.auth.models import User
+# from django.views.decorators.cache import cache_page
+# from django.utils.decorators import method_decorator
 
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
@@ -11,6 +12,8 @@ from rest_framework.views import APIView
 
 
 from rest_framework_simplejwt.tokens import RefreshToken
+
+from dotenv import load_dotenv
 
 from .choices import SenderTypeChoices, StatusChoices
 from .models import Avatar, ChatHistory, GeneratedAudio, Mood
@@ -25,8 +28,11 @@ from .serializers import (
 from .utils import clean_text, generate_elevenlabs_audio
 
 import google.generativeai as genai
+from openai import OpenAI
 
 # Create your views here.
+
+load_dotenv()
 
 
 class LoginUserView(generics.GenericAPIView):
@@ -73,19 +79,13 @@ class GenerateAudioView(generics.GenericAPIView):
         serializer = GeneratedAudioSerializer(data=request.data)
         if serializer.is_valid():
             validated_data = serializer.validated_data
-            # data = request.data
-            # user_text = data.get("text")
-            # mode = data.get("mode", "friendly")
-            # convo_id = data.get("conversation_id", str(uuid.uuid4()))
             user_text = validated_data.get("text")
-            # mode = validated_data.get("mode", "friendly")
             mode = request.data.get("mode", "friendly")
             convo_id = request.data.get("conversation_id", str(uuid.uuid4()))
-            # user_voice = data.get("user_voice", "Boy 1")
-            # ai_voice = data.get("ai_voice", "Girl 1")
             user_voice_name = validated_data.get("user_voice_name")
             ai_voice_name = validated_data.get("ai_voice_name")
             reply_as = validated_data.get("reply_as", "AI")
+
             user_voice = Avatar.objects.filter(
                 voice_name=user_voice_name, side=SenderTypeChoices.USER
             ).first()
@@ -95,62 +95,50 @@ class GenerateAudioView(generics.GenericAPIView):
 
             user_voice_id = user_voice.elevenlabs_voice_id
             ai_voice_id = ai_voice.elevenlabs_voice_id
-            prompt = ""
-            # if mode == "friendly":
-            #     prompt = f"Respond like a friendly person would in a casual conversation. Keep it short and to the point.\nUser: {user_text}\nAI:"
-            # elif mode == "funny":
-            #     prompt = f"Respond in a funny and lighthearted way. Keep it short and humorous.\nUser: {user_text}\nAI:"
-            # elif mode == "flirty":
-            #     prompt = f"Respond in a playful, flirty way but keep it respectful. Keep it short and sweet.\nUser: {user_text}\nAI:"
-            # elif mode == "wise":
-            #     prompt = f"Respond like a wise person with a calm and thoughtful tone. Keep it brief but insightful.\nUser: {user_text}\nAI:"
-            # elif mode == "formal":
-            #     prompt = f"Respond in a professional and respectful manner. Keep it concise and clear.\nUser: {user_text}\nAI:"
-            # elif mode == "angry":
-            #     prompt = f"Respond with frustration but be short and direct.\nUser: {user_text}\nAI:"
-            # elif mode == "sad":
-            #     prompt = f"Respond with a sad or somber tone, but keep it brief and respectful.\nUser: {user_text}\nAI:"
 
             mood_obj = Mood.objects.filter(
                 mood_name=mode.lower(), status=StatusChoices.ACTIVE
             ).first()
-            prompt = f"{mood_obj.mood_prompt}\nUser:{user_text}\nAI:"
+            prompt = f"{mood_obj.mood_prompt}\nUser: {user_text}\nAI:"
 
             if reply_as == "AI":
-                model = genai.GenerativeModel("gemini-2.0-flash")
-                response = model.generate_content(prompt)
-                ai_reply = clean_text(response.text.strip())
+                # --- OpenAI integration ---
+                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                try:
+                    response = client.chat.completions.create(
+                        model="gpt-3.5-turbo",
+                        messages=[
+                            {
+                                "role": "system",
+                                "content": "You are an AI character replying in a conversation.",
+                            },
+                            {"role": "user", "content": prompt},
+                        ],
+                    )
+                    ai_reply = clean_text(response.choices[0].message.content.strip())
+                except Exception as e:
+                    return Response(
+                        {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
             else:
-                # reply_text = validated_data.get("reply_text", None)
                 reply_text = request.data.get("reply_text", None)
                 if not reply_text:
                     raise serializers.ValidationError("User must provide a reply text")
                 ai_reply = clean_text(reply_text)
+
             audio_id = uuid.uuid4().hex
             user_audio = f"media/audio/user_{audio_id}.mp3"
             ai_audio = f"media/audio/ai_{audio_id}.mp3"
-            # print(user_audio.split("media/"))
+
             try:
-                gen_user_audio = generate_elevenlabs_audio(
-                    user_text, user_voice_id, user_audio
-                )
-                gen_ai_audio = generate_elevenlabs_audio(
-                    ai_reply, ai_voice_id, ai_audio
-                )
-                # gen_user = GeneratedAudio.objects.create(audio=gen_user_audio, sender_type=SenderTypeChoices.USER)
-                # gen_ai = GeneratedAudio.objects.create(audio=gen_ai_audio, sender_type=SenderTypeChoices.AI)
-                # print("Print gen_user and gen_ai", gen_user, gen_ai)
-            except:
+                generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
+                generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
+            except Exception:
                 from gtts import gTTS
 
-                gen_user_audio = gTTS(user_text).save(user_audio)
-                gen_ai_audio = gTTS(ai_reply).save(ai_audio)
-                # gen_user = GeneratedAudio.objects.create(audio=gen_user_audio, sender_type=SenderTypeChoices.USER)
-                # gen_ai = GeneratedAudio.objects.create(audio=gen_ai_audio, sender_type=SenderTypeChoices.AI)
-                # print("Print gen_user and gen_ai", gen_user, gen_ai)
+                gTTS(user_text).save(user_audio)
+                gTTS(ai_reply).save(ai_audio)
 
-            # gen_user = GeneratedAudio.objects.create(audio=gen_user_audio, sender_type=SenderTypeChoices.USER)
-            # gen_ai = GeneratedAudio.objects.create(audio=gen_ai_audio, sender_type=SenderTypeChoices.AI)
             gen_user = GeneratedAudio.objects.create(
                 text=user_text,
                 audio=user_audio.split("media/")[1],
@@ -163,8 +151,8 @@ class GenerateAudioView(generics.GenericAPIView):
                 sender_type=SenderTypeChoices.AI,
                 conversation_id=convo_id,
             )
+
             validated_data.pop("text")
-            # serializer.save()
 
             return Response(
                 {
@@ -173,7 +161,6 @@ class GenerateAudioView(generics.GenericAPIView):
                     "ai_audio": ai_audio.split("media/")[1],
                     "conversation_id": convo_id,
                 },
-                # serializer.data,
                 status=status.HTTP_201_CREATED,
             )
 
@@ -184,6 +171,10 @@ class ListCreateAvatarAPIView(generics.ListCreateAPIView):
     queryset = Avatar.objects.IS_ACTIVE()
     serializer_class = AvatarSerializer
     permission_classes = [IsAuthenticated]
+
+    # @method_decorator(cache_page(60 * 15, key_prefix="avatar_list_cache"))
+    # def list(self, request, *args, **kwargs):
+    #     return super().list(request, *args, **kwargs)
 
 
 class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView):
@@ -197,6 +188,10 @@ class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView)
             status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE],
         )
         return avatar
+
+    # @method_decorator(cache_page(60 * 15, key_prefix="avatar_list_cache"))
+    # def get(self, request, *args, **kwargs):
+    #     return super().get(request, *args, **kwargs)
 
     def perform_destroy(self, instance):
         instance.status = StatusChoices.REMOVED
@@ -217,6 +212,10 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
     lookup_field = "uid"
     permission_classes = [IsAuthenticated]
     # queryset = ChatHistory.objects.filter(status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE])
+
+    # @method_decorator(cache_page(60 * 2, key_prefix="chatHistory_list_cache"))
+    # def get(self, request, *args, **kwargs):
+    #     return super().get(request, *args, **kwargs)
 
     def retrieve(self, request, *args, **kwargs):
         # chat_history = self.get_object()
@@ -315,9 +314,6 @@ class AnalyzeTextView(APIView):
             model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(prompt)
 
-            # Debug: Print the full response from Gemini
-            # print(f"Full Response from Gemini: {response}")
-
             # Ensure the response is in the expected format
             if response and response.candidates:
                 candidates = response.candidates
@@ -346,6 +342,10 @@ class ListCreateMoodAPIView(generics.ListCreateAPIView):
     serializer_class = MoodSerializer
     permission_classes = [IsAuthenticated]
 
+    # @method_decorator(cache_page(60 * 15, key_prefix="mood_list_cache"))
+    # def list(self, request, *args, **kwargs):
+    #     return super().list(request, *args, **kwargs)
+
 
 class RetrieveUpdateDestroyMoodAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = MoodSerializer
@@ -357,3 +357,7 @@ class RetrieveUpdateDestroyMoodAPIView(generics.RetrieveUpdateDestroyAPIView):
             uid=self.kwargs["uid"],
             status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE],
         )
+
+    # @method_decorator(cache_page(60 * 15, key_prefix="mood_list_cache"))
+    # def get(self, request, *args, **kwargs):
+    #     return super().get(request, *args, **kwargs)
