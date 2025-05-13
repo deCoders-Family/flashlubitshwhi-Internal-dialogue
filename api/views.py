@@ -106,11 +106,11 @@ class GenerateAudioView(generics.GenericAPIView):
                 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
                 try:
                     response = client.chat.completions.create(
-                        model="gpt-3.5-turbo",
+                        model="gpt-4o",
                         messages=[
                             {
                                 "role": "system",
-                                "content": "You are an AI character replying in a conversation.",
+                                "content": "You are not an AI character. You will act like another person and reply in a conversation.",
                             },
                             {"role": "user", "content": prompt},
                         ],
