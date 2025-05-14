@@ -163,14 +163,16 @@ class AvatarSerializer(serializers.ModelSerializer):
             "updated_at",
         ]
         
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-            for field in self.fields:
-                if field not in self.Meta.read_only_fields:
-                    if field != "side":
-                        self.fields[field].required = False
+        for field in self.fields:
+            if field not in self.Meta.read_only_fields:
+                if field != "side":
+                    self.fields[field].required = False
 
+        
+        
 
 class MoodSerializer(serializers.ModelSerializer):
     class Meta:
