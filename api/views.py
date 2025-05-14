@@ -34,7 +34,7 @@ from openai import OpenAI
 
 load_dotenv()
 
-
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 class LoginUserView(generics.GenericAPIView):
     serializer_class = LoginUserSerializer
 
@@ -103,7 +103,7 @@ class GenerateAudioView(generics.GenericAPIView):
 
             if reply_as == "AI":
                 # --- OpenAI integration ---
-                client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+                
                 try:
                     response = client.chat.completions.create(
                         model="gpt-4o",
@@ -311,17 +311,29 @@ class AnalyzeTextView(APIView):
             f"in 2-3 sentences:\n\nText: {text}"
         )
         try:
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt)
+            # model = genai.GenerativeModel("gemini-2.0-flash")
+            # response = model.generate_content(prompt)
 
-            # Ensure the response is in the expected format
-            if response and response.candidates:
-                candidates = response.candidates
-                # Extract the analysis text from the response
-                analysis = candidates[0].content.parts[0].text.strip()
-                if analysis:
-                    summary = clean_text(analysis)
-                    return Response({"summary": summary}, status=status.HTTP_200_OK)
+            # # Ensure the response is in the expected format
+            # if response and response.candidates:
+            #     candidates = response.candidates
+            #     # Extract the analysis text from the response
+            #     analysis = candidates[0].content.parts[0].text.strip()
+            #     if analysis:
+            #         summary = clean_text(analysis)
+            #         return Response({"summary": summary}, status=status.HTTP_200_OK)
+            
+            response = client.chat.completions.create(
+                model="gpt-4o",  # or "gpt-4" if needed
+                messages=[
+                    {"role": "system", "content": "You are a helpful assistant that summarizes content."},
+                    {"role": "user", "content": prompt}
+                ]
+            )
+            analysis = response.choices[0].message.content.strip()
+            if analysis:
+                summary = clean_text(analysis)
+                return Response({"summary": summary}, status=status.HTTP_200_OK)
 
             return Response(
                 {
@@ -333,7 +345,7 @@ class AnalyzeTextView(APIView):
         except Exception:
             return Response(
                 {"error": "Failed to analyze the text."},
-                status=status.HTTP_500_INTERNAL,
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
 
