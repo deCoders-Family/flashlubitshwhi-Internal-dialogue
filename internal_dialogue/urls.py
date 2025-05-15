@@ -23,7 +23,7 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 
 urlpatterns = [
-    path("admin/", admin.site.urls),
+    path("admin/42d91c52-7abc-4e19-8234-bd971824ead1", admin.site.urls),
     path("api/", include("api.urls")),
     path('schema/', SpectacularAPIView.as_view(), name='schema'),
     # Optional UI:
