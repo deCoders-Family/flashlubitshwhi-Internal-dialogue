@@ -27,7 +27,7 @@ urlpatterns = [
     path("login", LoginUserView.as_view()),
     path("me", RetrieveUpdateDestroyMeUserAPIView.as_view()),
     path("speak", GenerateAudioAPIView.as_view()),
-    path("speak/<uuid:uid", RetrieveDestroyGenericAudioAPIView.as_view()),
+    path("speak/<uuid:uid>", RetrieveDestroyGenericAudioAPIView.as_view()),
     path("avatar", ListCreateAvatarAPIView.as_view()),
     path("avatar/<uuid:uid>", RetrieveUpdatedDestroyAvatarAPIView.as_view()),
     path("chat-history", ListCreateChatHistorySerializer.as_view()),
