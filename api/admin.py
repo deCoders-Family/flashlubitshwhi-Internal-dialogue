@@ -58,6 +58,7 @@ class ChatHistoryAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "status",
+        "user",
     ]
 
     def short_chat(self, obj):
@@ -80,6 +81,7 @@ class AvatarAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "status",
+        "user",
     ]
 
 

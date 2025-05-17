@@ -2,6 +2,7 @@ import os
 import uuid
 
 from django.contrib.auth import authenticate
+from django.db.models import Q
 # from django.views.decorators.cache import cache_page
 # from django.utils.decorators import method_decorator
 
@@ -51,7 +52,7 @@ class ListCreateUserAPIView(generics.ListCreateAPIView):
         return [permission() for permission in permission_classes]
 
 
-class RetrieveUpdateDeleteMeUserAPIView(generics.RetrieveUpdateDestroyAPIView):
+class RetrieveUpdateDestroyMeUserAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
 
@@ -99,7 +100,7 @@ class LoginUserView(generics.GenericAPIView):
 
 
 # class GenerateAudioView(APIView):
-class GenerateAudioView(generics.GenericAPIView):
+class GenerateAudioAPIView(generics.GenericAPIView):
     serializer_class = GeneratedAudioSerializer
     permission_classes = [IsAuthenticated]
 
@@ -115,6 +116,7 @@ class GenerateAudioView(generics.GenericAPIView):
             ai_voice_name = validated_data.get("ai_voice_name")
             reply_as = validated_data.get("reply_as", "AI")
             # reply_as = request.data.get("reply_as", "AI")
+            sender_type = request.data.get("sender_type")
 
             user_voice = Avatar.objects.filter(
                 voice_name=user_voice_name, side=SenderTypeChoices.USER
@@ -146,57 +148,204 @@ class GenerateAudioView(generics.GenericAPIView):
                         ],
                     )
                     ai_reply = clean_text(response.choices[0].message.content.strip())
+
                 except Exception as e:
                     return Response(
                         {"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR
                     )
+
+                audio_id = uuid.uuid4().hex
+                user_audio = f"media/audio/user_{audio_id}.mp3"
+                ai_audio = f"media/audio/ai_{audio_id}.mp3"
+
+                try:
+                    generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
+                    generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
+                except Exception:
+                    from gtts import gTTS
+
+                    gTTS(user_text).save(user_audio)
+                    gTTS(ai_reply).save(ai_audio)
+
+                gen_user = GeneratedAudio.objects.create(
+                    text=user_text,
+                    audio=user_audio.split("media/")[1],
+                    sender_type=SenderTypeChoices.USER,
+                    conversation_id=convo_id,
+                    user=user,
+                )
+                gen_ai = GeneratedAudio.objects.create(
+                    text=ai_reply,
+                    audio=ai_audio.split("media/")[1],
+                    sender_type=SenderTypeChoices.AI,
+                    conversation_id=convo_id,
+                    user=user,
+                )
+
+                validated_data.pop("text")
+
+                return Response(
+                    {
+                        "reply": ai_reply,
+                        # "reply_as": reply_as,
+                        "user_audio": user_audio.split("media/")[1],
+                        "ai_audio": ai_audio.split("media/")[1],
+                        "conversation_id": convo_id,
+                        # "user_audio_response": GeneratedAudioSerializer(gen_user).data,
+                        # "ai_audio_response": GeneratedAudioSerializer(gen_ai).data
+                    },
+                    status=status.HTTP_201_CREATED,
+                )
             else:
                 reply_text = request.data.get("reply_text", None)
                 if not reply_text:
                     raise serializers.ValidationError("User must provide a reply text")
                 ai_reply = clean_text(reply_text)
 
-            audio_id = uuid.uuid4().hex
-            user_audio = f"media/audio/user_{audio_id}.mp3"
-            ai_audio = f"media/audio/ai_{audio_id}.mp3"
+                audio_id = uuid.uuid4().hex
+                if sender_type == SenderTypeChoices.USER:
+                    user_audio = f"media/audio/user_{audio_id}.mp3"
+                    # ai_audio = f"media/audio/ai_{audio_id}.mp3"
 
-            try:
-                generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
-                generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
-            except Exception:
-                from gtts import gTTS
+                    try:
+                        generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
+                        # generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
+                    except Exception:
+                        from gtts import gTTS
 
-                gTTS(user_text).save(user_audio)
-                gTTS(ai_reply).save(ai_audio)
+                        gTTS(user_text).save(user_audio)
+                        # gTTS(ai_reply).save(ai_audio)
 
-            gen_user = GeneratedAudio.objects.create(
-                text=user_text,
-                audio=user_audio.split("media/")[1],
-                sender_type=SenderTypeChoices.USER,
-                conversation_id=convo_id,
-                user=user,
-            )
-            gen_ai = GeneratedAudio.objects.create(
-                text=ai_reply,
-                audio=ai_audio.split("media/")[1],
-                sender_type=SenderTypeChoices.AI,
-                conversation_id=convo_id,
-                user=user,
-            )
+                    gen_user = GeneratedAudio.objects.create(
+                        text=user_text,
+                        audio=user_audio.split("media/")[1],
+                        sender_type=SenderTypeChoices.USER,
+                        conversation_id=convo_id,
+                        user=user,
+                    )
+                    # gen_ai = GeneratedAudio.objects.create(
+                    #     text=ai_reply,
+                    #     audio=ai_audio.split("media/")[1],
+                    #     sender_type=SenderTypeChoices.AI,
+                    #     conversation_id=convo_id,
+                    #     user=user,
+                    # )
 
-            validated_data.pop("text")
+                    validated_data.pop("text")
 
-            return Response(
-                {
-                    "reply": ai_reply,
-                    "user_audio": user_audio.split("media/")[1],
-                    "ai_audio": ai_audio.split("media/")[1],
-                    "conversation_id": convo_id,
-                },
-                status=status.HTTP_201_CREATED,
-            )
+                    return Response(
+                        {
+                            "reply": ai_reply,
+                            # "reply_as": reply_as,
+                            "user_audio": user_audio.split("media/")[1],
+                            # "ai_audio": ai_audio.split("media/")[1],
+                            "conversation_id": convo_id,
+                            # "user_audio_response": GeneratedAudioSerializer(gen_user).data,
+                            # "ai_audio_response": GeneratedAudioSerializer(gen_ai).data
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
+                elif sender_type == SenderTypeChoices.AI:
+                    # user_audio = f"media/audio/user_{audio_id}.mp3"
+                    ai_audio = f"media/audio/ai_{audio_id}.mp3"
+
+                    try:
+                        # generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
+                        generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
+                    except Exception:
+                        from gtts import gTTS
+
+                        # gTTS(user_text).save(user_audio)
+                        gTTS(ai_reply).save(ai_audio)
+
+                    # gen_user = GeneratedAudio.objects.create(
+                    #     text=user_text,
+                    #     audio=user_audio.split("media/")[1],
+                    #     sender_type=SenderTypeChoices.USER,
+                    #     conversation_id=convo_id,
+                    #     user=user,
+                    # )
+                    gen_ai = GeneratedAudio.objects.create(
+                        text=ai_reply,
+                        audio=ai_audio.split("media/")[1],
+                        sender_type=SenderTypeChoices.AI,
+                        conversation_id=convo_id,
+                        user=user,
+                    )
+
+                    validated_data.pop("text")
+
+                    return Response(
+                        {
+                            "reply": ai_reply,
+                            # "reply_as": reply_as,
+                            # "user_audio": user_audio.split("media/")[1],
+                            "ai_audio": ai_audio.split("media/")[1],
+                            "conversation_id": convo_id,
+                            # "user_audio_response": GeneratedAudioSerializer(gen_user).data,
+                            # "ai_audio_response": GeneratedAudioSerializer(gen_ai).data
+                        },
+                        status=status.HTTP_201_CREATED,
+                    )
+
+            # audio_id = uuid.uuid4().hex
+            # user_audio = f"media/audio/user_{audio_id}.mp3"
+            # ai_audio = f"media/audio/ai_{audio_id}.mp3"
+
+            # try:
+            #     generate_elevenlabs_audio(user_text, user_voice_id, user_audio)
+            #     generate_elevenlabs_audio(ai_reply, ai_voice_id, ai_audio)
+            # except Exception:
+            #     from gtts import gTTS
+
+            #     gTTS(user_text).save(user_audio)
+            #     gTTS(ai_reply).save(ai_audio)
+
+            # gen_user = GeneratedAudio.objects.create(
+            #     text=user_text,
+            #     audio=user_audio.split("media/")[1],
+            #     sender_type=SenderTypeChoices.USER,
+            #     conversation_id=convo_id,
+            #     user=user,
+            # )
+            # gen_ai = GeneratedAudio.objects.create(
+            #     text=ai_reply,
+            #     audio=ai_audio.split("media/")[1],
+            #     sender_type=SenderTypeChoices.AI,
+            #     conversation_id=convo_id,
+            #     user=user,
+            # )
+
+            # validated_data.pop("text")
+
+            # return Response(
+            #     {
+            #         "reply": ai_reply,
+            #         # "reply_as": reply_as,
+            #         "user_audio": user_audio.split("media/")[1],
+            #         "ai_audio": ai_audio.split("media/")[1],
+            #         "conversation_id": convo_id,
+            #         # "user_audio_response": GeneratedAudioSerializer(gen_user).data,
+            #         # "ai_audio_response": GeneratedAudioSerializer(gen_ai).data
+            #     },
+            #     status=status.HTTP_201_CREATED,
+            # )
 
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class RetrieveDestroyGenericAudioAPIView(generics.RetrieveDestroyAPIView):
+    serializer_class = GeneratedAudioSerializer
+    permission_classes = [IsAuthenticated]
+    lookup_field = "uid"
+
+    def get_object(self):
+        return GeneratedAudio.objects.IS_ACTIVE().get(uid=self.kwargs["uid"])
+
+    def perform_destroy(self, instance):
+        instance.status = StatusChoices.REMOVED
+        instance.save()
 
 
 class ListCreateAvatarAPIView(generics.ListCreateAPIView):
@@ -205,7 +354,11 @@ class ListCreateAvatarAPIView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Avatar.objects.IS_ACTIVE().filter(user=self.request.user)
+        return (
+            Avatar.objects.IS_ACTIVE()
+            .filter(Q(user=self.request.user) | Q(user__isnull=True))
+            .order_by("id")
+        )
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -243,7 +396,11 @@ class ListCreateChatHistorySerializer(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return ChatHistory.objects.IS_ACTIVE().filter(user=self.request.user)
+        return (
+            ChatHistory.objects.IS_ACTIVE()
+            .filter(user=self.request.user)
+            .order_by("id")
+        )
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -401,9 +558,16 @@ class AnalyzeTextView(APIView):
 
 
 class ListCreateMoodAPIView(generics.ListCreateAPIView):
-    queryset = Mood.objects.IS_ACTIVE()
+    # queryset = Mood.objects.IS_ACTIVE()
     serializer_class = MoodSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return (
+            Mood.objects.IS_ACTIVE()
+            .filter(Q(user=self.request.user) | Q(user__isnull=True))
+            .order_by("id")
+        )
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)

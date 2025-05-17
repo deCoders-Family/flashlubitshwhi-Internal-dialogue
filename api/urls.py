@@ -7,15 +7,16 @@ from rest_framework_simplejwt.views import (
 
 from .views import (
     AnalyzeTextView,
-    GenerateAudioView,
+    GenerateAudioAPIView,
     ListCreateAvatarAPIView,
     ListCreateChatHistorySerializer,
     ListCreateMoodAPIView,
     ListCreateUserAPIView,
     LoginUserView,
+    RetrieveDestroyGenericAudioAPIView,
     RetrieveUpdatedDestroyAvatarAPIView,
     RetrieveUpdatedDestroyChatHistoryAPIView,
-    RetrieveUpdateDeleteMeUserAPIView,
+    RetrieveUpdateDestroyMeUserAPIView,
     RetrieveUpdateDestroyMoodAPIView,
     ReplayDialogeAPIView,
 )
@@ -24,8 +25,9 @@ from .views import (
 urlpatterns = [
     path("users", ListCreateUserAPIView.as_view()),
     path("login", LoginUserView.as_view()),
-    path("me", RetrieveUpdateDeleteMeUserAPIView.as_view()),
-    path("speak", GenerateAudioView.as_view()),
+    path("me", RetrieveUpdateDestroyMeUserAPIView.as_view()),
+    path("speak", GenerateAudioAPIView.as_view()),
+    path("speak/<uuid:uid", RetrieveDestroyGenericAudioAPIView.as_view()),
     path("avatar", ListCreateAvatarAPIView.as_view()),
     path("avatar/<uuid:uid>", RetrieveUpdatedDestroyAvatarAPIView.as_view()),
     path("chat-history", ListCreateChatHistorySerializer.as_view()),
