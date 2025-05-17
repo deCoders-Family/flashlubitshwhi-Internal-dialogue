@@ -1,8 +1,26 @@
 from django.contrib import admin
 
-from .models import GeneratedAudio, ChatHistory, Avatar, Mood
+from .models import GeneratedAudio, ChatHistory, Avatar, Mood, User
 
 # Register your models here.
+
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    ordering = ["id"]
+    list_display = [
+        "id",
+        "uid",
+        "username",
+        "first_name",
+        "last_name",
+        "email",
+        "is_active",
+        "is_staff",
+        "is_superuser",
+        "created_at",
+        "updated_at",
+        "status",
+    ]
 
 
 @admin.register(GeneratedAudio)
@@ -19,6 +37,7 @@ class GeneratedAudioAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "status",
+        "user"
     ]
 
     def short_text(self, obj):
@@ -63,6 +82,7 @@ class AvatarAdmin(admin.ModelAdmin):
         "status",
     ]
 
+
 @admin.register(Mood)
 class MoodAdmin(admin.ModelAdmin):
     ordering = ["id"]
@@ -74,4 +94,5 @@ class MoodAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "status",
+        "user"
     ]

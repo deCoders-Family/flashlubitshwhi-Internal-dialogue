@@ -23,6 +23,34 @@ class SenderTypeManager(Manager):
         return self.filter(sender_type=SenderTypeChoices.AI)
 
 
+class UserManager(BaseUserManager, StatusManager):
+    def create_user(self, email, password=None, password2=None, **extra_fields):
+        if not email:
+            raise ValueError("Users must have an email address.")
+        # print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~", email, password, extra_fields)
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password, **extra_fields):
+        user = self.create_user(email, password, **extra_fields)
+        user.is_staff = True
+        user.is_superuser = True
+        user.save(using=self._db)
+        return user
+
+    def IS_ACTIVE(self):
+        return super().IS_ACTIVE()
+
+    def IS_INACTIVE(self):
+        return super().IS_INACTIVE()
+
+    def IS_REMOVED(self):
+        return super().IS_REMOVED()
+
+
 class GeneratedAudioManager(StatusManager):
     def IS_ACTIVE(self):
         return super().IS_ACTIVE()

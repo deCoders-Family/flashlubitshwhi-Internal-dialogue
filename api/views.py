@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate
 
 from rest_framework import status, generics, serializers
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAdminUser, IsAuthenticated
 from rest_framework.views import APIView
 
 
@@ -16,7 +16,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from dotenv import load_dotenv
 
 from .choices import SenderTypeChoices, StatusChoices
-from .models import Avatar, ChatHistory, GeneratedAudio, Mood
+from .models import Avatar, ChatHistory, GeneratedAudio, Mood, User
 from .serializers import (
     AvatarSerializer,
     ChatHistorySerializer,
@@ -35,6 +35,34 @@ from openai import OpenAI
 load_dotenv()
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+class ListCreateUserAPIView(generics.ListCreateAPIView):
+    queryset = User.objects.IS_ACTIVE().order_by("id")
+    serializer_class = UserSerializer
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            permission_classes = [IsAdminUser]
+
+        else:
+            permission_classes = [AllowAny]
+
+        return [permission() for permission in permission_classes]
+
+
+class RetrieveUpdateDeleteMeUserAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_object(self):
+        return self.request.user
+
+    def perform_destroy(self, instance):
+        instance.status = StatusChoices.REMOVED
+        instance.save()
+
+
 class LoginUserView(generics.GenericAPIView):
     serializer_class = LoginUserSerializer
 
@@ -42,9 +70,9 @@ class LoginUserView(generics.GenericAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        username = serializer.validated_data["username"]
+        email = serializer.validated_data["email"]
         password = serializer.validated_data["password"]
-        user = authenticate(username=username, password=password)
+        user = authenticate(username=email, password=password)
 
         if not user:
             return Response(
@@ -62,12 +90,12 @@ class LoginUserView(generics.GenericAPIView):
         )
 
 
-class RetrieveUpdateMeUserView(generics.RetrieveUpdateAPIView):
-    serializer_class = UserSerializer
-    permission_classes = [IsAuthenticated]
+# class RetrieveUpdateMeUserView(generics.RetrieveUpdateAPIView):
+#     serializer_class = UserSerializer
+#     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
+#     def get_object(self):
+#         return self.request.user
 
 
 # class GenerateAudioView(APIView):
@@ -76,6 +104,7 @@ class GenerateAudioView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
+        user = self.request.user
         serializer = GeneratedAudioSerializer(data=request.data)
         if serializer.is_valid():
             validated_data = serializer.validated_data
@@ -85,25 +114,26 @@ class GenerateAudioView(generics.GenericAPIView):
             user_voice_name = validated_data.get("user_voice_name")
             ai_voice_name = validated_data.get("ai_voice_name")
             reply_as = validated_data.get("reply_as", "AI")
+            # reply_as = request.data.get("reply_as", "AI")
 
             user_voice = Avatar.objects.filter(
                 voice_name=user_voice_name, side=SenderTypeChoices.USER
-            ).first()
+            ).latest("created_at")
             ai_voice = Avatar.objects.filter(
                 voice_name=ai_voice_name, side=SenderTypeChoices.AI
-            ).first()
+            ).latest("created_at")
 
             user_voice_id = user_voice.elevenlabs_voice_id
             ai_voice_id = ai_voice.elevenlabs_voice_id
 
             mood_obj = Mood.objects.filter(
                 mood_name=mode.lower(), status=StatusChoices.ACTIVE
-            ).first()
+            ).latest("created_at")
             prompt = f"{mood_obj.mood_prompt}\nUser: {user_text}\nAI:"
 
-            if reply_as == "AI":
+            if reply_as == SenderTypeChoices.AI:
                 # --- OpenAI integration ---
-                
+
                 try:
                     response = client.chat.completions.create(
                         model="gpt-4o",
@@ -144,12 +174,14 @@ class GenerateAudioView(generics.GenericAPIView):
                 audio=user_audio.split("media/")[1],
                 sender_type=SenderTypeChoices.USER,
                 conversation_id=convo_id,
+                user=user,
             )
             gen_ai = GeneratedAudio.objects.create(
                 text=ai_reply,
                 audio=ai_audio.split("media/")[1],
                 sender_type=SenderTypeChoices.AI,
                 conversation_id=convo_id,
+                user=user,
             )
 
             validated_data.pop("text")
@@ -168,9 +200,15 @@ class GenerateAudioView(generics.GenericAPIView):
 
 
 class ListCreateAvatarAPIView(generics.ListCreateAPIView):
-    queryset = Avatar.objects.IS_ACTIVE()
+    # queryset = Avatar.objects.IS_ACTIVE()
     serializer_class = AvatarSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Avatar.objects.IS_ACTIVE().filter(user=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     # @method_decorator(cache_page(60 * 15, key_prefix="avatar_list_cache"))
     # def list(self, request, *args, **kwargs):
@@ -184,6 +222,7 @@ class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView)
 
     def get_object(self):
         avatar = Avatar.objects.get(
+            user=self.request.user,
             uid=self.kwargs["uid"],
             status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE],
         )
@@ -199,12 +238,15 @@ class RetrieveUpdatedDestroyAvatarAPIView(generics.RetrieveUpdateDestroyAPIView)
 
 
 class ListCreateChatHistorySerializer(generics.ListCreateAPIView):
-    queryset = ChatHistory.objects.IS_ACTIVE()
+    # queryset = ChatHistory.objects.IS_ACTIVE()
     serializer_class = ChatHistorySerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):
+        return ChatHistory.objects.IS_ACTIVE().filter(user=self.request.user)
+
     def perform_create(self, serializer):
-        serializer.save()
+        serializer.save(user=self.request.user)
 
 
 class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPIView):
@@ -219,13 +261,17 @@ class RetrieveUpdatedDestroyChatHistoryAPIView(generics.RetrieveUpdateDestroyAPI
 
     def retrieve(self, request, *args, **kwargs):
         # chat_history = self.get_object()
-        chat_history = ChatHistory.objects.IS_ACTIVE().get(uid=self.kwargs["uid"])
+        chat_history = ChatHistory.objects.IS_ACTIVE().get(
+            uid=self.kwargs["uid"], user=self.request.user
+        )
 
         chat_dict = []
         audio_dict = []
 
         chats = GeneratedAudio.objects.filter(
-            conversation_id=chat_history.conversation_id, status=StatusChoices.ACTIVE
+            conversation_id=chat_history.conversation_id,
+            status=StatusChoices.ACTIVE,
+            user=self.request.user,
         )
 
         for chat in chats:
@@ -267,12 +313,14 @@ class ReplayDialogeAPIView(APIView):
 
         # Fetch all chats and audios for this conversation
         generated_audios = GeneratedAudio.objects.filter(
-            conversation_id=conversation_id, status=StatusChoices.ACTIVE
+            conversation_id=conversation_id,
+            status=StatusChoices.ACTIVE,
+            user=self.request.user,
         )
 
         if not generated_audios.exists():
             return Response(
-                {"error": "No data found for this conversation_id."},
+                {"error": "No data found for this conversation id or User."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
@@ -322,13 +370,16 @@ class AnalyzeTextView(APIView):
             #     if analysis:
             #         summary = clean_text(analysis)
             #         return Response({"summary": summary}, status=status.HTTP_200_OK)
-            
+
             response = client.chat.completions.create(
                 model="gpt-4o",  # or "gpt-4" if needed
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that summarizes content."},
-                    {"role": "user", "content": prompt}
-                ]
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that summarizes content.",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
             )
             analysis = response.choices[0].message.content.strip()
             if analysis:
@@ -354,6 +405,9 @@ class ListCreateMoodAPIView(generics.ListCreateAPIView):
     serializer_class = MoodSerializer
     permission_classes = [IsAuthenticated]
 
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
     # @method_decorator(cache_page(60 * 15, key_prefix="mood_list_cache"))
     # def list(self, request, *args, **kwargs):
     #     return super().list(request, *args, **kwargs)
@@ -366,6 +420,7 @@ class RetrieveUpdateDestroyMoodAPIView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_object(self):
         return Mood.objects.get(
+            user=self.request.user,
             uid=self.kwargs["uid"],
             status__in=[StatusChoices.ACTIVE, StatusChoices.INACTIVE],
         )

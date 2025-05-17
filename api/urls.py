@@ -11,18 +11,20 @@ from .views import (
     ListCreateAvatarAPIView,
     ListCreateChatHistorySerializer,
     ListCreateMoodAPIView,
+    ListCreateUserAPIView,
     LoginUserView,
     RetrieveUpdatedDestroyAvatarAPIView,
     RetrieveUpdatedDestroyChatHistoryAPIView,
+    RetrieveUpdateDeleteMeUserAPIView,
     RetrieveUpdateDestroyMoodAPIView,
-    RetrieveUpdateMeUserView,
     ReplayDialogeAPIView,
 )
 
 
 urlpatterns = [
+    path("users", ListCreateUserAPIView.as_view()),
     path("login", LoginUserView.as_view()),
-    path("me", RetrieveUpdateMeUserView.as_view()),
+    path("me", RetrieveUpdateDeleteMeUserAPIView.as_view()),
     path("speak", GenerateAudioView.as_view()),
     path("avatar", ListCreateAvatarAPIView.as_view()),
     path("avatar/<uuid:uid>", RetrieveUpdatedDestroyAvatarAPIView.as_view()),

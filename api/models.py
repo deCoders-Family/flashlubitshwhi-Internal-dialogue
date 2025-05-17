@@ -1,5 +1,7 @@
 from django.db import models
 
+from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
+
 import uuid
 
 from .choices import StatusChoices, SenderTypeChoices
@@ -8,9 +10,31 @@ from .managers import (
     ChatHistoryManager,
     GeneratedAudioManager,
     MoodManager,
+    UserManager,
 )
 from .utils import avatar_video_upload_path
 # Create your models here.
+
+
+class User(AbstractBaseUser, PermissionsMixin):
+    uid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    username = models.CharField(max_length=255, unique=True)
+    email = models.EmailField(max_length=255, unique=True)
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(
+        max_length=10, choices=StatusChoices, default=StatusChoices.ACTIVE
+    )
+
+    objects = UserManager()
+    USERNAME_FIELD = "email"
+
+    def __str__(self):
+        return self.email
 
 
 class GeneratedAudio(models.Model):
@@ -24,6 +48,7 @@ class GeneratedAudio(models.Model):
     status = models.CharField(
         max_length=10, choices=StatusChoices, default=StatusChoices.ACTIVE
     )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="generated_audios", null=True)
 
     objects = GeneratedAudioManager()
 
@@ -58,6 +83,7 @@ class ChatHistory(models.Model):
     status = models.CharField(
         max_length=10, choices=StatusChoices, default=StatusChoices.ACTIVE
     )
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="chat_histories", null=True)
 
     objects = ChatHistoryManager()
 
@@ -77,6 +103,7 @@ class Avatar(models.Model):
     status = models.CharField(
         max_length=10, choices=StatusChoices, default=StatusChoices.ACTIVE
     )
+    user = models.ForeignKey(User, models.CASCADE, related_name="avatars", null=True)
 
     objects = AvatarManager()
 
@@ -93,12 +120,13 @@ class Mood(models.Model):
     status = models.CharField(
         max_length=10, choices=StatusChoices, default=StatusChoices.ACTIVE
     )
-    
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="moods", null=True)
+
     objects = MoodManager()
-    
+
     def save(self, *args, **kwargs):
         self.mood_name = self.mood_name.lower()
         super().save(*args, **kwargs)
-    
+
     def __str__(self):
         return self.mood_name

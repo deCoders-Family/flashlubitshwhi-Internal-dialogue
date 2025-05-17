@@ -1,31 +1,91 @@
-from django.contrib.auth.models import User
-
 import json
 from rest_framework import serializers
-from .models import GeneratedAudio, ChatHistory, Avatar, Mood
+from .models import GeneratedAudio, ChatHistory, Avatar, Mood, User
 
 
 class UserSerializer(serializers.ModelSerializer):
-    # password = serializers.CharField(write_only=True)
+    password = serializers.CharField(style={"input_type": "password"}, write_only=True)
+    password2 = serializers.CharField(style={"input_type": "password"}, write_only=True)
 
     class Meta:
         model = User
         fields = [
             "id",
+            "uid",
             "username",
             "first_name",
             "last_name",
             "email",
+            "password",
+            "password2",
             "is_active",
-            "is_staff",
-            "date_joined",
+            "created_at",
+            "updated_at",
+            "status"
+        ]
+        
+        read_only_fields = [
+            "id",
+            "uid",
+            "is_active",
+            "created_at",
+            "updated_at",
+            "status"
+        ]
+        
+    def validate_password(self, instance):
+        if instance != self.initial_data["password2"]:
+            raise serializers.ValidationError("Passwords do not match")
+        return instance
+
+    def create(self, validated_data):
+        validated_data.pop("password2")
+        return User.objects.create_user(**validated_data)
+
+
+class UserLiteSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "username",
+            "first_name",
+            "last_name",
+            "email",
         ]
 
-
 class LoginUserSerializer(serializers.Serializer):
-    username = serializers.CharField()
+    email = serializers.EmailField()
     password = serializers.CharField(style={"input_type": "password"}, write_only=True)
 
+
+class ChangePasswordSerializer(serializers.ModelSerializer):
+    old_password = serializers.CharField(
+        style={"input_type": "password"}, write_only=True
+    )
+    new_password = serializers.CharField(
+        style={"input_type": "password"}, write_only=True
+    )
+    new_password2 = serializers.CharField(
+        style={"input_type": "password"}, write_only=True
+    )
+
+    class Meta:
+        model = User
+        fields = ["old_password", "new_password", "new_password2"]
+
+    # def validate(self, attrs):
+    #     if attrs['new_password'] != attrs['new_password2']:
+    #         raise serializers.ValidationError('Passwords do not match')
+    #     return attrs
+
+    def update(self, instance, validated_data):
+        if not instance.check_password(validated_data["old_password"]):
+            raise serializers.ValidationError("Password is incorrect")
+        if validated_data["new_password"] != validated_data["new_password2"]:
+            raise serializers.ValidationError("Passwords do not match")
+        instance.set_password(validated_data["new_password"])
+        instance.save()
+        return instance
 
 class GeneratedAudioSerializer(serializers.ModelSerializer):
     # text = serializers.CharField(write_only=True)
@@ -33,6 +93,7 @@ class GeneratedAudioSerializer(serializers.ModelSerializer):
     user_voice_name = serializers.CharField(write_only=True)
     ai_voice_name = serializers.CharField(write_only=True)
     reply_as = serializers.CharField(write_only=True)
+    user = UserSerializer(read_only=True)
 
     class Meta:
         model = GeneratedAudio
@@ -50,6 +111,7 @@ class GeneratedAudioSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "user"
         ]
         read_only_fields = [
             "id",
@@ -58,10 +120,12 @@ class GeneratedAudioSerializer(serializers.ModelSerializer):
             "audio_length",
             "created_at",
             "updated_at",
+            "user"
         ]
 
 
 class ChatHistorySerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = ChatHistory
         fields = [
@@ -73,6 +137,8 @@ class ChatHistorySerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "user"
+
         ]
 
         read_only_fields = [
@@ -81,6 +147,7 @@ class ChatHistorySerializer(serializers.ModelSerializer):
             "chat",
             "created_at",
             "updated_at",
+            "user"
         ]
 
     # def validate_chat(self, value):
@@ -142,6 +209,7 @@ class ChatHistorySerializer(serializers.ModelSerializer):
 
 
 class AvatarSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Avatar
         fields = [
@@ -155,12 +223,14 @@ class AvatarSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "user"
         ]
         read_only_fields = [
             "id",
             "uid",
             "created_at",
             "updated_at",
+            "user"
         ]
         
     def __init__(self, *args, **kwargs):
@@ -175,6 +245,7 @@ class AvatarSerializer(serializers.ModelSerializer):
         
 
 class MoodSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Mood
         fields = [
@@ -185,6 +256,7 @@ class MoodSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "user"
         ]
         
         read_only_fields = [
@@ -193,4 +265,5 @@ class MoodSerializer(serializers.ModelSerializer):
             "created_at",
             "updated_at",
             "status",
+            "user"
         ]
